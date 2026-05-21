@@ -35,15 +35,23 @@ class ExtractionPipeline:
         self.img_semaphore = asyncio.Semaphore(cfg.max_concurrent_img)
 
     def call_paddle_env_to_cut(self, img_path: Path, output_dir: Path) -> None:
-        worker_script = Path(__file__).with_name(self.profile.cutter_script)
+        project_root = Path(__file__).resolve().parents[1]
+        worker_module = f"icu_vllm.{Path(self.profile.cutter_script).stem}"
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = ""
+        existing_pythonpath = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (
+            str(project_root)
+            if not existing_pythonpath
+            else f"{project_root}{os.pathsep}{existing_pythonpath}"
+        )
 
         result = subprocess.run(
-            [str(self.cfg.ocr_python), str(worker_script), "--img", str(img_path), "--out", str(output_dir)],
+            [str(self.cfg.ocr_python), "-m", worker_module, "--img", str(img_path), "--out", str(output_dir)],
             env=env,
             capture_output=True,
             text=True,
+            cwd=project_root,
         )
         if result.returncode != 0:
             raise RuntimeError(f"切割崩溃。\nstderr:\n{result.stderr}")
