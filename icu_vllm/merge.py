@@ -91,7 +91,7 @@ def map_block_to_sheet02(block: dict[str, Any], patient_info: dict[str, Any], ye
     oxygen = safe_split(block.get("给氧方式"), sep="/", num_parts=3)
     sputum = safe_split(block.get("痰"), sep="/", num_parts=2)
     tube = safe_split(block.get("管路护理"), sep="/", num_parts=5)
-    restraint = safe_split(block.get("约束"), sep="/", num_parts=2)
+    restraint = safe_split(block.get("约束部位_情况") or block.get("约束"), sep="/", num_parts=2)
 
     return {
         "住院号": patient_info.get("住院号"),
@@ -126,17 +126,17 @@ def map_block_to_sheet02(block: dict[str, Any], patient_info: dict[str, Any], ye
         "每时": block.get("入量_每时"),
         "总量": block.get("入量_总量"),
         "出量-总量": block.get("出量_总量"),
-        "出量-尿量": block.get("尿量"),
-        "出量-大便颜色性状": block.get("大便"),
-        "其他出量": block.get("其他出量"),
-        "痰-色": sputum[0],
-        "痰-量": sputum[1],
+        "出量-尿量": block.get("出量_尿量") or block.get("尿量"),
+        "出量-大便颜色性状": block.get("出量_大便_颜色性状") or block.get("大便"),
+        "其他出量": block.get("出量_其他出量") or block.get("其他出量"),
+        "痰-色": block.get("痰_色") or sputum[0],
+        "痰-量": block.get("痰_量") or sputum[1],
         "管道护理-名称": tube[0],
         "管道护理-通畅": tube[1],
         "管道护理-颜色": tube[2],
         "管道护理-外露刻度": tube[3],
         "管道护理-留置刻度": tube[4],
-        "床头抬高30°": block.get("床头抬高"),
+        "床头抬高30°": block.get("床头抬高30度") or block.get("床头抬高"),
         "约束部位": restraint[0],
         "约束部位情况": restraint[1],
         "体位": block.get("体位"),
