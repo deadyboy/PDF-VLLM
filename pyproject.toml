@@ -1,0 +1,15 @@
+[project]
+name = "icu-vllm"
+version = "0.1.0"
+description = "Clean vLLM pipeline for ICU nursing record extraction"
+requires-python = ">=3.10"
+dependencies = [
+  "openai",
+  "json-repair",
+  "openpyxl",
+  "pandas==2.2.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

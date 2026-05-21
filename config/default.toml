@@ -1,0 +1,24 @@
+[paths]
+workspace = "/data1/jianf-vllm"
+input_dir = "/data1/jianf/新提取pdf/180data"
+runs_dir = "/data1/jianf-vllm/runs"
+ocr_python = "/home/jianf/miniconda3/envs/ocr_legacy/bin/python"
+
+[vllm]
+base_url = "http://localhost:8000/v1"
+api_key = "EMPTY"
+model_name = "qwen2.5vl-72b"
+timeout_seconds = 300
+
+[concurrency]
+max_concurrent_llm = 96
+max_concurrent_cut = 32
+max_concurrent_img = 96
+
+[server]
+model_path = "/data1/bigmodels/qwen2.5-vl-72B"
+host = "127.0.0.1"
+port = 8000
+tensor_parallel = 4
+data_parallel = 2
+gpu_ids = "0,1,2,3,4,5,6,7"
