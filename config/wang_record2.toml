@@ -1,11 +1,11 @@
 [paths]
 workspace = "/data1/jianf-vllm"
-input_dir = "/data1/jianf/新提取pdf/180data"
+input_dir = "/data1/jianf/新提取pdf/routed_data/data_record2"
 runs_dir = "/data1/jianf-vllm/runs"
 ocr_python = "/home/jianf/miniconda3/envs/ocr_legacy/bin/python"
 
 [pipeline]
-profile = "jin"
+profile = "wang_record2"
 
 [vllm]
 base_url = "http://localhost:8002/v1"
@@ -14,9 +14,9 @@ model_name = "qwen2.5vl-72b"
 timeout_seconds = 300
 
 [concurrency]
-max_concurrent_llm = 96
-max_concurrent_cut = 32
-max_concurrent_img = 96
+max_concurrent_llm = 40
+max_concurrent_cut = 12
+max_concurrent_img = 24
 
 [server]
 model_path = "/data1/bigmodels/qwen2.5-vl-72B"

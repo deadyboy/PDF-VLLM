@@ -22,6 +22,18 @@ cd /data1/jianf-vllm
   --run-id "$(date +%Y%m%d-%H%M%S)-180data"
 ```
 
+Run Wang director record types:
+
+```bash
+/home/jianf/miniconda3/envs/vllm/bin/python -m icu_vllm.run \
+  --config config/wang_record1.toml \
+  --run-id "$(date +%Y%m%d-%H%M%S)-wang-record1"
+
+/home/jianf/miniconda3/envs/vllm/bin/python -m icu_vllm.run \
+  --config config/wang_record2.toml \
+  --run-id "$(date +%Y%m%d-%H%M%S)-wang-record2"
+```
+
 Resume an interrupted run:
 
 ```bash

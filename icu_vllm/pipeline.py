@@ -14,7 +14,9 @@ from openai import AsyncOpenAI
 
 from .config import PipelineConfig, RunDirs
 from .json_utils import normalize_nulls, parse_model_json
-from .prompts import PROMPT_HEADER, PROMPT_L, PROMPT_M, PROMPT_R, PROMPT_SUMMARY
+from . import prompts
+from .prompts import PROMPT_SUMMARY
+from .profiles import ExtractionProfile, get_profile
 
 
 class ExtractionPipeline:
@@ -22,6 +24,7 @@ class ExtractionPipeline:
         self.cfg = cfg
         self.run_dirs = run_dirs
         self.resume = resume
+        self.profile: ExtractionProfile = get_profile(cfg.profile_name)
         self.client = AsyncOpenAI(
             base_url=cfg.vllm_base_url,
             api_key=cfg.vllm_api_key,
@@ -32,7 +35,7 @@ class ExtractionPipeline:
         self.img_semaphore = asyncio.Semaphore(cfg.max_concurrent_img)
 
     def call_paddle_env_to_cut(self, img_path: Path, output_dir: Path) -> None:
-        worker_script = Path(__file__).with_name("cutter_worker_jin.py")
+        worker_script = Path(__file__).with_name(self.profile.cutter_script)
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -107,42 +110,52 @@ class ExtractionPipeline:
         header_img_path = slice_dir / "_header_info.png"
         if not header_img_path.exists():
             return
-        patient_data = await self.extract_single_part(header_img_path, PROMPT_HEADER)
+        if not self.profile.header_prompt_name:
+            return
+        patient_data = await self.extract_single_part(
+            header_img_path,
+            getattr(prompts, self.profile.header_prompt_name),
+        )
         if "_error" not in patient_data:
             cache_file.write_text(json.dumps(patient_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    async def process_three_columns_batch(self, slice_dir: Path, output_json: Path, img_name: str) -> None:
-        l_files = sorted(slice_dir.glob("block_*_L.png"))
-        if not l_files:
-            raise RuntimeError(f"在 {slice_dir} 中未找到 L 切片文件。")
+    async def process_columns_batch(self, slice_dir: Path, output_json: Path, img_name: str) -> None:
+        first_suffix = self.profile.column_suffixes[0]
+        first_files = sorted(slice_dir.glob(f"block_*_{first_suffix}.png"))
+        if not first_files:
+            raise RuntimeError(f"在 {slice_dir} 中未找到 {first_suffix} 切片文件。")
 
         error_log_file = self.run_dirs.logs_dir / "llm_json_errors_log.txt"
+        prompt_texts = [getattr(prompts, name) for name in self.profile.prompt_names]
 
-        async def process_one_block(l_img: Path) -> dict[str, Any]:
-            prefix = l_img.stem.replace("_L", "")
-            m_img = slice_dir / f"{prefix}_M.png"
-            r_img = slice_dir / f"{prefix}_R.png"
-            data_l, data_m, data_r = await asyncio.gather(
-                self.extract_single_part(l_img, PROMPT_L),
-                self.extract_single_part(m_img, PROMPT_M),
-                self.extract_single_part(r_img, PROMPT_R),
+        async def process_one_block(first_img: Path) -> dict[str, Any]:
+            prefix = first_img.stem.rsplit(f"_{first_suffix}", 1)[0]
+            part_images = [
+                slice_dir / f"{prefix}_{suffix}.png"
+                for suffix in self.profile.column_suffixes
+            ]
+            part_results = await asyncio.gather(
+                *(
+                    self.extract_single_part(part_img, prompt_text)
+                    for part_img, prompt_text in zip(part_images, prompt_texts)
+                )
             )
-            if "_raw" in data_l or "_raw" in data_m or "_raw" in data_r:
+            if any("_raw" in result for result in part_results):
                 with error_log_file.open("a", encoding="utf-8") as f:
                     f.write(f"\n{'=' * 50}\n")
                     f.write(f"发现错误: 图片 {img_name} -> 块 {prefix}\n")
-                    if "_raw" in data_l:
-                        f.write(f"【左侧部分返回】:\n{data_l['_raw']}\n\n")
-                    if "_raw" in data_m:
-                        f.write(f"【中间部分返回】:\n{data_m['_raw']}\n\n")
-                    if "_raw" in data_r:
-                        f.write(f"【右侧部分返回】:\n{data_r['_raw']}\n\n")
-            merged = {**data_l, **data_m, **data_r}
+                    for suffix, result in zip(self.profile.column_suffixes, part_results):
+                        if "_raw" in result:
+                            f.write(f"【{suffix} 部分返回】:\n{result['_raw']}\n\n")
+            merged: dict[str, Any] = {}
+            for result in part_results:
+                merged.update(result)
             merged.pop("_raw", None)
             merged["_block_id"] = prefix
+            merged["_profile"] = self.profile.name
             return normalize_nulls(merged)
 
-        results = list(await asyncio.gather(*(process_one_block(path) for path in l_files)))
+        results = list(await asyncio.gather(*(process_one_block(path) for path in first_files)))
 
         async def process_summary(s_img: Path) -> dict[str, Any]:
             prefix = s_img.stem
@@ -156,7 +169,7 @@ class ExtractionPipeline:
             data_summary["_block_id"] = prefix
             return normalize_nulls(data_summary)
 
-        summary_files = sorted(slice_dir.glob("summary_*.png"))
+        summary_files = sorted(slice_dir.glob("summary_*.png")) if self.profile.enable_summary else []
         if summary_files:
             results.extend(await asyncio.gather(*(process_summary(path) for path in summary_files)))
 
@@ -173,7 +186,7 @@ class ExtractionPipeline:
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, self.call_paddle_env_to_cut, img_file, temp_slice_dir)
             await self.extract_patient_info_once(temp_slice_dir, img_file.name)
-            await self.process_three_columns_batch(temp_slice_dir, json_path, img_file.name)
+            await self.process_columns_batch(temp_slice_dir, json_path, img_file.name)
             return f"SUCCESS {img_file.name}"
         except Exception as exc:
             if temp_slice_dir.exists():
@@ -210,6 +223,7 @@ class ExtractionPipeline:
         manifest = {
             "run_id": self.run_dirs.run_id,
             "input_dir": str(self.cfg.input_dir),
+            "profile": self.profile.name,
             "result_dir": str(self.run_dirs.results_json_dir),
             "patient_cache_dir": str(self.run_dirs.patient_cache_dir),
             "excel_dir": str(self.run_dirs.excel_dir),

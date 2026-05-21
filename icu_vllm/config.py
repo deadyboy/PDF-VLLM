@@ -7,6 +7,7 @@ from typing import Any
 
 @dataclass
 class PipelineConfig:
+    profile_name: str
     workspace: Path
     input_dir: Path
     runs_dir: Path
@@ -72,8 +73,10 @@ def load_config(path: Path) -> PipelineConfig:
     paths = data["paths"]
     vllm = data["vllm"]
     concurrency = data["concurrency"]
+    pipeline = data.get("pipeline", {})
 
     return PipelineConfig(
+        profile_name=str(pipeline.get("profile", "jin")),
         workspace=Path(paths["workspace"]),
         input_dir=Path(paths["input_dir"]),
         runs_dir=Path(paths["runs_dir"]),
