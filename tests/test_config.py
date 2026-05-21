@@ -8,6 +8,7 @@ def test_default_config_only_uses_old_project_as_input():
 
     assert cfg.input_dir.as_posix() == "/data1/jianf/新提取pdf/180data"
     assert cfg.workspace == Path("/data1/jianf-vllm")
+    assert cfg.vllm_base_url == "http://localhost:8002/v1"
 
     old_project = "/data1/jianf/新提取pdf"
     assert old_project not in str(cfg.runs_dir)

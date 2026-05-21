@@ -8,7 +8,7 @@
 MODEL_PATH="/data1/bigmodels/qwen2.5-vl-72B"   # HuggingFace 模型路径（本地或远程）
 TENSOR_PARALLEL=4                               # 张量并行 GPU 数量（每组 4 卡）
 DATA_PARALLEL=2                                 # 数据并行副本数（2 组独立引擎）
-PORT=8000                                       # vLLM OpenAI 兼容 API 监听端口
+PORT=8002                                       # vLLM OpenAI 兼容 API 监听端口
 HOST="127.0.0.1"                                # 仅允许本机访问，业务脚本通过 localhost 调用
 GPU_IDS="0,1,2,3,4,5,6,7"                       # 可用 GPU
 
