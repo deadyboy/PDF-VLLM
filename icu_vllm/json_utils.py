@@ -10,7 +10,19 @@ except Exception:  # pragma: no cover - production env has json_repair
     repair_json = None
 
 
+KEY_ALIASES = {
+    "床头抬高30°": "床头抬高30度",
+}
+
+
 def normalize_nulls(data_dict: dict[str, Any]) -> dict[str, Any]:
+    for source, target in KEY_ALIASES.items():
+        if source not in data_dict:
+            continue
+        source_value = data_dict.pop(source)
+        if target not in data_dict or data_dict[target] in (None, "", "null", "NULL"):
+            data_dict[target] = source_value
+
     for key, value in data_dict.items():
         if isinstance(value, str) and value.strip().lower() in ["null", "none", ""]:
             data_dict[key] = None

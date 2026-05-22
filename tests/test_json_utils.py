@@ -18,3 +18,12 @@ def test_normalize_nulls_converts_false_null_strings():
         "备注": None,
         "心率": "90",
     }
+
+
+def test_normalize_nulls_maps_known_field_aliases():
+    data = {"床头抬高30°": "√", "体温": ""}
+
+    assert normalize_nulls(data) == {
+        "床头抬高30度": "√",
+        "体温": None,
+    }
