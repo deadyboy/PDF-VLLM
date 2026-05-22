@@ -19,6 +19,34 @@ from .prompts import PROMPT_SUMMARY
 from .profiles import ExtractionProfile, get_profile
 
 
+def select_input_images(
+    input_dir: Path,
+    patient_id: str | None = None,
+    limit: int | None = None,
+    sample_names: list[str] | None = None,
+) -> list[Path]:
+    if sample_names:
+        image_files: list[Path] = []
+        for raw_name in sample_names:
+            sample_path = Path(raw_name)
+            img_file = sample_path if sample_path.is_absolute() else input_dir / raw_name
+            if not img_file.exists():
+                raise FileNotFoundError(f"Sample image does not exist: {img_file}")
+            image_files.append(img_file)
+    else:
+        image_files = sorted(
+            list(input_dir.glob("*.png"))
+            + list(input_dir.glob("*.jpg"))
+            + list(input_dir.glob("*.jpeg"))
+        )
+
+    if patient_id:
+        image_files = [p for p in image_files if p.name.startswith(f"{patient_id}_")]
+    if limit is not None:
+        image_files = image_files[:limit]
+    return image_files
+
+
 class ExtractionPipeline:
     def __init__(self, cfg: PipelineConfig, run_dirs: RunDirs, resume: bool = False):
         self.cfg = cfg
@@ -209,37 +237,44 @@ class ExtractionPipeline:
         self,
         patient_id: str | None = None,
         limit: int | None = None,
+        sample_names: list[str] | None = None,
     ) -> dict[str, Any]:
-        image_files = sorted(
-            list(self.cfg.input_dir.glob("*.png"))
-            + list(self.cfg.input_dir.glob("*.jpg"))
-            + list(self.cfg.input_dir.glob("*.jpeg"))
+        image_files = select_input_images(
+            self.cfg.input_dir,
+            patient_id=patient_id,
+            limit=limit,
+            sample_names=sample_names,
         )
-        if patient_id:
-            image_files = [p for p in image_files if p.name.startswith(f"{patient_id}_")]
-        if limit is not None:
-            image_files = image_files[:limit]
 
         start = time.time()
 
-        async def throttled_process(img_file: Path) -> str:
+        async def throttled_process(img_file: Path) -> tuple[str, str, float]:
+            img_start = time.time()
             async with self.img_semaphore:
-                return await self.process_single_image(img_file)
+                message = await self.process_single_image(img_file)
+            return img_file.name, message, round(time.time() - img_start, 3)
 
-        results = await asyncio.gather(*(throttled_process(img) for img in image_files))
+        timed_results = await asyncio.gather(*(throttled_process(img) for img in image_files))
+        results = [message for _, message, _ in timed_results]
         elapsed = time.time() - start
         manifest = {
             "run_id": self.run_dirs.run_id,
             "input_dir": str(self.cfg.input_dir),
             "profile": self.profile.name,
+            "model_name": self.cfg.model_name,
+            "vllm_base_url": self.cfg.vllm_base_url,
             "result_dir": str(self.run_dirs.results_json_dir),
             "patient_cache_dir": str(self.run_dirs.patient_cache_dir),
             "excel_dir": str(self.run_dirs.excel_dir),
             "image_count": len(image_files),
+            "image_names": [p.name for p in image_files],
             "success": sum(1 for r in results if r.startswith("SUCCESS")),
             "skipped": sum(1 for r in results if r.startswith("SKIPPED")),
             "failed": sum(1 for r in results if r.startswith("FAILED")),
             "elapsed_seconds": round(elapsed, 3),
+            "image_timings_seconds": {
+                img_name: seconds for img_name, _, seconds in timed_results
+            },
             "messages": results,
         }
         self.run_dirs.manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

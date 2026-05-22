@@ -1,0 +1,4 @@
+# Fixed small benchmark sample for Jin 180data.
+0010016667_2025_4_25_1.png
+0010017838_2021_3_24_1.png
+0010017838_2021_3_24_11.png

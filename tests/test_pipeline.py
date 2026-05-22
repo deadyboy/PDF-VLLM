@@ -1,7 +1,31 @@
 from pathlib import Path
 
 from icu_vllm.config import load_config, prepare_run_dirs
-from icu_vllm.pipeline import ExtractionPipeline
+from icu_vllm.pipeline import ExtractionPipeline, select_input_images
+
+
+def test_select_input_images_uses_samples_in_given_order(tmp_path):
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    first = input_dir / "b.png"
+    second = input_dir / "a.png"
+    first.write_bytes(b"png")
+    second.write_bytes(b"png")
+    (input_dir / "c.png").write_bytes(b"png")
+
+    assert select_input_images(input_dir, sample_names=["b.png", "a.png"]) == [first, second]
+
+
+def test_select_input_images_rejects_missing_sample(tmp_path):
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+
+    try:
+        select_input_images(input_dir, sample_names=["missing.png"])
+    except FileNotFoundError as exc:
+        assert "missing.png" in str(exc)
+    else:
+        raise AssertionError("missing sample should fail before launching a benchmark")
 
 
 def test_cutter_runs_as_module_to_avoid_stdlib_inspect_shadow(tmp_path, monkeypatch):

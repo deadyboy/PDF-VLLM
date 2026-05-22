@@ -4,13 +4,17 @@
 # 使用 DP-2 × TP-4 架构最大化吞吐量
 # ==========================================
 
-# 配置项 —— 按你的实际环境修改
-MODEL_PATH="/data1/bigmodels/qwen2.5-vl-72B"   # HuggingFace 模型路径（本地或远程）
-TENSOR_PARALLEL=4                               # 张量并行 GPU 数量（每组 4 卡）
-DATA_PARALLEL=2                                 # 数据并行副本数（2 组独立引擎）
-PORT=8002                                       # vLLM OpenAI 兼容 API 监听端口
-HOST="127.0.0.1"                                # 仅允许本机访问，业务脚本通过 localhost 调用
-GPU_IDS="0,1,2,3,4,5,6,7"                       # 可用 GPU
+# 配置项可通过环境变量覆盖，默认仍是 72B 正式服务。
+MODEL_PATH="${MODEL_PATH:-/data1/bigmodels/qwen2.5-vl-72B}"
+TENSOR_PARALLEL="${TENSOR_PARALLEL:-4}"
+DATA_PARALLEL="${DATA_PARALLEL:-2}"
+PORT="${PORT:-8002}"
+HOST="${HOST:-127.0.0.1}"
+GPU_IDS="${GPU_IDS:-0,1,2,3,4,5,6,7}"
+SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-qwen2.5vl-72b}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-24576}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.92}"
 
 # 限制使用的 GPU
 export CUDA_VISIBLE_DEVICES=$GPU_IDS
@@ -36,12 +40,12 @@ python -m vllm.entrypoints.openai.api_server \
     --data-parallel-size $DATA_PARALLEL \
     --host "$HOST" \
     --port $PORT \
-    --max-model-len 24576 \
-    --max-num-seqs 64 \
-    --gpu-memory-utilization 0.92 \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --max-num-seqs "$MAX_NUM_SEQS" \
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --trust-remote-code \
     --enable-chunked-prefill \
     --enable-prefix-caching \
     --limit-mm-per-prompt '{"image": 1}' \
     --dtype auto \
-    --served-model-name "qwen2.5vl-72b"
+    --served-model-name "$SERVED_MODEL_NAME"
