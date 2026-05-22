@@ -15,6 +15,11 @@ SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-qwen2.5vl-72b}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-24576}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.92}"
+LIMIT_MM_PER_PROMPT="${LIMIT_MM_PER_PROMPT:-{\"image\": 1}}"
+MM_PROCESSOR_CACHE_GB="${MM_PROCESSOR_CACHE_GB:-}"
+GENERATION_CONFIG="${GENERATION_CONFIG:-}"
+EXTRA_VLLM_ARGS="${EXTRA_VLLM_ARGS:-}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 
 # 限制使用的 GPU
 export CUDA_VISIBLE_DEVICES=$GPU_IDS
@@ -24,6 +29,7 @@ echo "   模型: $MODEL_PATH"
 echo "   张量并行: $TENSOR_PARALLEL 卡 × 数据并行: $DATA_PARALLEL 组"
 echo "   监听地址: $HOST:$PORT"
 echo "   GPU: $GPU_IDS"
+echo "   OpenMP 线程: $OMP_NUM_THREADS"
 echo ""
 
 # 启动 vLLM OpenAI 兼容 API 服务器
@@ -34,18 +40,34 @@ echo ""
 # --enable-prefix-caching:   缓存相同 prompt 模板的 KV Cache，避免重复计算
 # --gpu-memory-utilization:  提高到 0.92，为更多 KV Cache 腾出空间
 
-python -m vllm.entrypoints.openai.api_server \
-    --model "$MODEL_PATH" \
-    --tensor-parallel-size $TENSOR_PARALLEL \
-    --data-parallel-size $DATA_PARALLEL \
-    --host "$HOST" \
-    --port $PORT \
-    --max-model-len "$MAX_MODEL_LEN" \
-    --max-num-seqs "$MAX_NUM_SEQS" \
-    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
-    --trust-remote-code \
-    --enable-chunked-prefill \
-    --enable-prefix-caching \
-    --limit-mm-per-prompt '{"image": 1}' \
-    --dtype auto \
+ARGS=(
+    --model "$MODEL_PATH"
+    --tensor-parallel-size "$TENSOR_PARALLEL"
+    --data-parallel-size "$DATA_PARALLEL"
+    --host "$HOST"
+    --port "$PORT"
+    --max-model-len "$MAX_MODEL_LEN"
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
+    --trust-remote-code
+    --enable-chunked-prefill
+    --enable-prefix-caching
+    --limit-mm-per-prompt "$LIMIT_MM_PER_PROMPT"
+    --dtype auto
     --served-model-name "$SERVED_MODEL_NAME"
+)
+
+if [ -n "$MM_PROCESSOR_CACHE_GB" ]; then
+    ARGS+=(--mm-processor-cache-gb "$MM_PROCESSOR_CACHE_GB")
+fi
+
+if [ -n "$GENERATION_CONFIG" ]; then
+    ARGS+=(--generation-config "$GENERATION_CONFIG")
+fi
+
+if [ -n "$EXTRA_VLLM_ARGS" ]; then
+    # shellcheck disable=SC2206
+    ARGS+=($EXTRA_VLLM_ARGS)
+fi
+
+python -m vllm.entrypoints.openai.api_server "${ARGS[@]}"

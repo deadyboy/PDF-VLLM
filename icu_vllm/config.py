@@ -19,6 +19,7 @@ class PipelineConfig:
     max_concurrent_llm: int
     max_concurrent_cut: int
     max_concurrent_img: int
+    mm_processor_kwargs: dict[str, Any]
 
     @property
     def log_base(self) -> Path:
@@ -74,6 +75,7 @@ def load_config(path: Path) -> PipelineConfig:
     vllm = data["vllm"]
     concurrency = data["concurrency"]
     pipeline = data.get("pipeline", {})
+    mm_processor = data.get("mm_processor", {})
 
     return PipelineConfig(
         profile_name=str(pipeline.get("profile", "jin")),
@@ -88,6 +90,7 @@ def load_config(path: Path) -> PipelineConfig:
         max_concurrent_llm=int(concurrency["max_concurrent_llm"]),
         max_concurrent_cut=int(concurrency["max_concurrent_cut"]),
         max_concurrent_img=int(concurrency["max_concurrent_img"]),
+        mm_processor_kwargs=dict(mm_processor),
     )
 
 

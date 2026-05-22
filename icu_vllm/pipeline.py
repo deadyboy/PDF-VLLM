@@ -116,6 +116,11 @@ class ExtractionPipeline:
         raw = ""
         for attempt in range(retries):
             try:
+                request_kwargs: dict[str, Any] = {}
+                if self.cfg.mm_processor_kwargs:
+                    request_kwargs["extra_body"] = {
+                        "mm_processor_kwargs": self.cfg.mm_processor_kwargs,
+                    }
                 async with self.llm_semaphore:
                     response = await self.client.chat.completions.create(
                         model=self.cfg.model_name,
@@ -129,6 +134,7 @@ class ExtractionPipeline:
                         temperature=0.0,
                         max_tokens=8192,
                         stop=["<|im_end|>", "<|endoftext|>"],
+                        **request_kwargs,
                     )
                 raw = response.choices[0].message.content or ""
                 return parse_model_json(raw)

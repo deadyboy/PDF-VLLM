@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from icu_vllm.config import load_config, prepare_run_dirs
 from icu_vllm.pipeline import ExtractionPipeline, select_input_images
@@ -56,3 +57,29 @@ def test_cutter_runs_as_module_to_avoid_stdlib_inspect_shadow(tmp_path, monkeypa
     assert calls["args"][1:3] == ["-m", "icu_vllm.cutter_worker_jin"]
     assert calls["cwd"] == Path(__file__).resolve().parents[1]
     assert str(calls["cwd"]) in calls["env"]["PYTHONPATH"].split(__import__("os").pathsep)
+
+
+def test_extract_single_part_passes_mm_processor_kwargs(tmp_path):
+    cfg = load_config(Path("config/default.toml"))
+    cfg.workspace = tmp_path
+    cfg.runs_dir = tmp_path / "runs"
+    cfg.mm_processor_kwargs = {"max_pixels": 1003520}
+    run_dirs = prepare_run_dirs(cfg, "unit")
+    pipeline = ExtractionPipeline(cfg, run_dirs)
+    image_path = tmp_path / "slice.png"
+    image_path.write_bytes(b"png")
+    captured = {}
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content='{"体温": "36.5"}'))]
+            )
+
+    pipeline.client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+
+    data = __import__("asyncio").run(pipeline.extract_single_part(image_path, "prompt"))
+
+    assert data == {"体温": "36.5"}
+    assert captured["extra_body"] == {"mm_processor_kwargs": {"max_pixels": 1003520}}
