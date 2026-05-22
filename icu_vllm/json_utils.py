@@ -12,6 +12,9 @@ except Exception:  # pragma: no cover - production env has json_repair
 
 KEY_ALIASES = {
     "床头抬高30°": "床头抬高30度",
+    "约束部位/情况": "约束部位_情况",
+    "血糖(mmol/L)": "血糖",
+    "血糖mmol/L": "血糖",
 }
 
 

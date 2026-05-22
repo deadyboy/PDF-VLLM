@@ -21,9 +21,16 @@ def test_normalize_nulls_converts_false_null_strings():
 
 
 def test_normalize_nulls_maps_known_field_aliases():
-    data = {"床头抬高30°": "√", "体温": ""}
+    data = {
+        "床头抬高30°": "√",
+        "约束部位/情况": "双上肢/良好",
+        "血糖(mmol/L)": "6.1",
+        "体温": "",
+    }
 
     assert normalize_nulls(data) == {
         "床头抬高30度": "√",
+        "约束部位_情况": "双上肢/良好",
+        "血糖": "6.1",
         "体温": None,
     }
