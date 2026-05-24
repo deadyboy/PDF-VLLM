@@ -36,6 +36,48 @@ def is_summary_row(img_segment, ocr_engine):
         return False
     return False
 
+def choose_header_bottom_y(merged_y, image_height, fallback_y=450):
+    """Return the header bottom line and its row index from detected horizontal lines."""
+    if not merged_y:
+        return min(fallback_y, image_height), 0
+    if len(merged_y) == 1:
+        return merged_y[0], 0
+
+    gaps = [merged_y[i + 1] - merged_y[i] for i in range(len(merged_y) - 1)]
+    typical_gap = float(np.median(gaps)) if gaps else 0.0
+    gap_threshold = max(80.0, typical_gap * 2.0)
+    search_limit = image_height * 0.35
+
+    best_idx = None
+    best_gap = 0
+    for idx, gap in enumerate(gaps):
+        if merged_y[idx + 1] <= search_limit and gap >= gap_threshold and gap > best_gap:
+            best_idx = idx + 1
+            best_gap = gap
+    if best_idx is not None:
+        return merged_y[best_idx], best_idx
+
+    for idx, y in enumerate(merged_y):
+        if y >= fallback_y - 10:
+            return y, idx
+    return merged_y[0], 0
+
+def choose_jin_column_splits(col_xs, image_width):
+    """Return L/M and M/R split x coordinates for the Jin nursing form."""
+    if len(col_xs) >= 37:
+        # M must include all fields owned by PROMPT_M: in/out volume, sputum,
+        # other output, and tube-care columns. R starts at bed-head elevation.
+        x1, x2 = col_xs[20], col_xs[36]
+        print(f"✅ [Worker] 按网格数定位切分坐标: x1={x1}, x2={x2}")
+    else:
+        print(f"⚠️ [Worker] 竖线数量异常 ({len(col_xs)} 根)，启用比例兜底")
+        target1, target2 = int(image_width * 0.26), int(image_width * 0.70)
+        x1 = min(col_xs, key=lambda x: abs(x - target1)) if col_xs else target1
+        x2 = min(col_xs, key=lambda x: abs(x - target2)) if col_xs else target2
+    x1 = max(0, min(x1, image_width - 2))
+    x2 = max(x1 + 1, min(x2, image_width - 1))
+    return x1, x2
+
 # 🌟 新增：从表头一次性提取所有竖线坐标和全局切分点（移植自王主任一单 cutter）
 def get_global_splits_by_counting(header_img):
     h, w = header_img.shape[:2]
@@ -59,18 +101,8 @@ def get_global_splits_by_counting(header_img):
         col_xs = merged_xs
 
     print(f"🔍 [Worker] 在表头区精确识别到 {len(col_xs)} 根网格竖线")
-    
-    # 金主任数据切两刀分三部分：生命体征区(L)、出入量区(M)、护理文本区(R)
-    if len(col_xs) >= 32: 
-        x1, x2 = col_xs[20], col_xs[31] 
-        print(f"✅ [Worker] 按网格数定位切分坐标: x1={x1}, x2={x2}")
-    else:
-        print(f"⚠️ [Worker] 竖线数量异常 ({len(col_xs)} 根)，启用比例兜底")
-        target1, target2 = int(w * 0.41), int(w * 0.72)
-        x1 = min(col_xs, key=lambda x: abs(x - target1)) if col_xs else target1
-        x2 = min(col_xs, key=lambda x: abs(x - target2)) if col_xs else target2
-    coords = max(0, min(x1, w-1)), max(x1, min(x2, w-1))
-    return coords, col_xs
+
+    return choose_jin_column_splits(col_xs, w), col_xs
 
 # 🌟 修改：移除 2 倍放大，仅保留白边补边（彻底解决视觉 Token 爆炸导致的 OOM）
 # 🌟 二次修改：新增最长边上限，防止高分辨率切片仍超出 num_ctx 导致模型输出乱码
@@ -152,8 +184,7 @@ def main():
 
     img_path = args.img
     output_base = args.out
-    # header_bottom_y = 526
-    header_bottom_y = 450
+    header_bottom_fallback_y = 450
 
     print(f"🔍 [Worker] 子进程启动，开始处理图片: {img_path}")
 
@@ -203,7 +234,10 @@ def main():
         print(f"❌ [Worker] 横线检测阶段发生异常: {e}")
         return
 
-    # 🌟 改进：先把表头截出来，只对表头算一次全局的 X 切分坐标（替代原来每块独立算的 split_into_three_columns）
+    header_bottom_y, start_data_idx = choose_header_bottom_y(merged_y, H, header_bottom_fallback_y)
+    print(f"🔍 [Worker] 动态表头底线: y={header_bottom_y}, 数据区起始行索引={start_data_idx}")
+
+    # 🌟 改进：先把完整表头截出来，只对表头算一次全局的 X 切分坐标（替代原来每块独立算的 split_into_three_columns）
     header = img[0:header_bottom_y, :]
     (global_x1, global_x2), all_sub_lines = get_global_splits_by_counting(header)
 
@@ -214,13 +248,6 @@ def main():
     time_col_width = int(W * 0.15)
     
     # ================= 🌟 智能孤儿行回收（移植自王主任一单 cutter） =================
-
-    # 1. 动态寻找"数据区"的真正起始线索引 (跳过表头内部的横线)
-    start_data_idx = 0
-    for i, y in enumerate(merged_y):
-        if y >= header_bottom_y - 10: 
-            start_data_idx = i
-            break
 
     # 2. 扫描真正的时间锚点与小时小结行 (从数据区起始线开始扫)
     print(f"🔍 [Worker] 正在扫描每一行的时间锚点与小时小结...")

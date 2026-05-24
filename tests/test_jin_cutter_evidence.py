@@ -44,3 +44,28 @@ def test_write_ocr_evidence_json_writes_empty_items_when_no_ocr(tmp_path, monkey
         "part": "M",
         "ocr_items": [],
     }
+
+
+def test_jin_column_splits_keep_m_prompt_fields_in_m_slice(monkeypatch):
+    cutter = load_jin_cutter(monkeypatch)
+
+    col_xs = [
+        21, 92, 164, 213, 235, 251, 292, 306, 377, 409, 448, 519,
+        590, 679, 750, 839, 910, 981, 1052, 1124, 1176, 1229, 1282,
+        1354, 1398, 1425, 1852, 2172, 2243, 2332, 2421, 2493, 2563,
+        2776, 2829, 2883, 3096, 3150, 3221, 3292, 3346, 3453, 3506,
+        3559, 3684, 3755, 4306, 4430,
+    ]
+
+    assert cutter.choose_jin_column_splits(col_xs, image_width=4451) == (1176, 3096)
+
+
+def test_choose_header_bottom_y_uses_horizontal_line_gap(monkeypatch):
+    cutter = load_jin_cutter(monkeypatch)
+
+    merged_y = [
+        299, 343, 520, 565, 610, 655, 698, 743, 788, 832, 876, 921,
+        965, 1010, 1054, 1099,
+    ]
+
+    assert cutter.choose_header_bottom_y(merged_y, image_height=3130) == (520, 2)

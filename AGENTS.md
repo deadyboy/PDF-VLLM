@@ -43,6 +43,14 @@ Do not include `Qwen2.5-VL-7B` in future accuracy reviews. It overfills and
 cross-fills too aggressively for this task. Do not delete model weights from the
 server unless the user explicitly asks for filesystem cleanup.
 
+When starting the full accuracy model review matrix, maximize GPU utilization
+instead of using conservative defaults. First inspect active GPU/tmux state and
+stop only stale review-owned `modelcmp_*` sessions from prior interrupted runs.
+Then pass explicit GPU/TP/DP overrides so the matrix uses all GPUs that are
+available or authorized for the review; do not leave large models on only a
+small subset of cards by accident. Preserve unrelated long-lived services unless
+the current user request authorizes stopping them.
+
 Use `scripts/run_accuracy_model_review.sh` to run the matrix. The script writes
 reports under:
 
