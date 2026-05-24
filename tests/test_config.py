@@ -15,6 +15,7 @@ def test_default_config_only_uses_old_project_as_input():
     assert old_project not in str(cfg.log_base)
     assert old_project not in str(cfg.patient_cache_dir)
     assert cfg.mm_processor_kwargs == {}
+    assert cfg.keep_success_m_evidence is False
 
 
 def test_config_loads_optional_mm_processor_kwargs(tmp_path):
@@ -29,6 +30,7 @@ ocr_python = "/home/jianf/miniconda3/envs/ocr_legacy/bin/python"
 
 [pipeline]
 profile = "jin"
+keep_success_m_evidence = true
 
 [vllm]
 base_url = "http://localhost:8005/v1"
@@ -50,6 +52,7 @@ max_pixels = 1003520
 
     cfg = load_config(config_path)
 
+    assert cfg.keep_success_m_evidence is True
     assert cfg.mm_processor_kwargs == {
         "min_pixels": 200704,
         "max_pixels": 1003520,

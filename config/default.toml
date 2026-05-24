@@ -6,6 +6,7 @@ ocr_python = "/home/jianf/miniconda3/envs/ocr_legacy/bin/python"
 
 [pipeline]
 profile = "jin"
+keep_success_m_evidence = false
 
 [vllm]
 base_url = "http://localhost:8002/v1"

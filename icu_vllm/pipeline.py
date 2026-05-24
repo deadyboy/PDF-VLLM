@@ -90,7 +90,41 @@ class ExtractionPipeline:
     def encode_image_base64(img_path: Path) -> str:
         return base64.b64encode(img_path.read_bytes()).decode("utf-8")
 
-    async def extract_single_part(self, img_path: Path, prompt_text: str, retries: int = 5) -> dict[str, Any]:
+    def _write_evidence_warning(self, message: str) -> None:
+        try:
+            warning_path = self.run_dirs.logs_dir / "m_evidence_warnings.log"
+            with warning_path.open("a", encoding="utf-8") as f:
+                f.write(message.rstrip() + "\n")
+        except Exception:
+            pass
+
+    def _keep_m_evidence_enabled(self) -> bool:
+        return bool(self.cfg.keep_success_m_evidence and self.profile.name == "jin")
+
+    def _copy_success_m_evidence(self, slice_dir: Path, img_name: str) -> None:
+        if not self._keep_m_evidence_enabled():
+            return
+        evidence_dir = self.run_dirs.run_dir / "debug" / "m_evidence" / Path(img_name).stem
+        try:
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            for pattern in (
+                "block_*_M.png",
+                "block_*_M.txt",
+                "block_*_M.ocr.json",
+                "block_*_M.raw_response.txt",
+            ):
+                for path in slice_dir.glob(pattern):
+                    shutil.copy2(path, evidence_dir / path.name)
+        except Exception as exc:
+            self._write_evidence_warning(f"{img_name}: failed to copy M evidence: {exc}")
+
+    async def extract_single_part(
+        self,
+        img_path: Path,
+        prompt_text: str,
+        retries: int = 5,
+        raw_output_path: Path | None = None,
+    ) -> dict[str, Any]:
         if not img_path.exists():
             return {"_error": "文件不存在"}
 
@@ -137,6 +171,11 @@ class ExtractionPipeline:
                         **request_kwargs,
                     )
                 raw = response.choices[0].message.content or ""
+                if raw_output_path is not None:
+                    try:
+                        raw_output_path.write_text(raw, encoding="utf-8")
+                    except Exception as exc:
+                        self._write_evidence_warning(f"{img_path.name}: failed to save raw response: {exc}")
                 return parse_model_json(raw)
             except Exception as exc:
                 if attempt == retries - 1:
@@ -176,10 +215,16 @@ class ExtractionPipeline:
                 slice_dir / f"{prefix}_{suffix}.png"
                 for suffix in self.profile.column_suffixes
             ]
+            raw_output_paths = [
+                slice_dir / f"{prefix}_{suffix}.raw_response.txt"
+                if self._keep_m_evidence_enabled() and suffix == "M"
+                else None
+                for suffix in self.profile.column_suffixes
+            ]
             part_results = await asyncio.gather(
                 *(
-                    self.extract_single_part(part_img, prompt_text)
-                    for part_img, prompt_text in zip(part_images, prompt_texts)
+                    self.extract_single_part(part_img, prompt_text, raw_output_path=raw_output_path)
+                    for part_img, prompt_text, raw_output_path in zip(part_images, prompt_texts, raw_output_paths)
                 )
             )
             if any("_raw" in result for result in part_results):
@@ -216,6 +261,7 @@ class ExtractionPipeline:
             results.extend(await asyncio.gather(*(process_summary(path) for path in summary_files)))
 
         output_json.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._copy_success_m_evidence(slice_dir, img_name)
 
     async def process_single_image(self, img_file: Path) -> str:
         json_path = self.run_dirs.results_json_dir / f"{img_file.stem}_result.json"

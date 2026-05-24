@@ -20,6 +20,7 @@ class PipelineConfig:
     max_concurrent_cut: int
     max_concurrent_img: int
     mm_processor_kwargs: dict[str, Any]
+    keep_success_m_evidence: bool = False
 
     @property
     def log_base(self) -> Path:
@@ -44,6 +45,10 @@ class RunDirs:
 
 def _parse_scalar(value: str) -> Any:
     value = value.strip()
+    if value.lower() == "true":
+        return True
+    if value.lower() == "false":
+        return False
     if value.startswith('"') and value.endswith('"'):
         return value[1:-1]
     try:
@@ -91,6 +96,7 @@ def load_config(path: Path) -> PipelineConfig:
         max_concurrent_cut=int(concurrency["max_concurrent_cut"]),
         max_concurrent_img=int(concurrency["max_concurrent_img"]),
         mm_processor_kwargs=dict(mm_processor),
+        keep_success_m_evidence=bool(pipeline.get("keep_success_m_evidence", False)),
     )
 
 

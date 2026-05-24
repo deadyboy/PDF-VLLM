@@ -5,6 +5,7 @@ import os
 import shutil
 import re
 import argparse
+import json
 from paddleocr import PaddleOCR
 
 TIME_PATTERN = re.compile(r"([01]?\d|2[0-3])[:：][0-5]\d")
@@ -82,6 +83,42 @@ def optimize_image_for_llm(img, max_long_side=1400):
         padded = cv2.resize(padded, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
     return padded
 
+def _part_from_name(name_prefix):
+    return name_prefix.rsplit("_", 1)[-1] if "_" in name_prefix else ""
+
+def _point_to_float_pair(point):
+    return [float(point[0]), float(point[1])]
+
+def _ocr_items_from_result(ocr_result):
+    items = []
+    lines = ocr_result[0] if ocr_result and ocr_result[0] else []
+    for line in lines:
+        try:
+            bbox = [_point_to_float_pair(point) for point in line[0]]
+            text = str(line[1][0])
+            score = float(line[1][1])
+            center_x = sum(point[0] for point in bbox) / len(bbox)
+            center_y = sum(point[1] for point in bbox) / len(bbox)
+        except Exception:
+            continue
+        items.append({
+            "text": text,
+            "bbox": bbox,
+            "score": score,
+            "center_y": center_y,
+            "center_x": center_x,
+        })
+    return sorted(items, key=lambda item: (round(item["center_y"], 2), item["center_x"]))
+
+def write_ocr_evidence_json(base_dir, name_prefix, ocr_result):
+    payload = {
+        "image": f"{name_prefix}.png",
+        "part": _part_from_name(name_prefix),
+        "ocr_items": _ocr_items_from_result(ocr_result),
+    }
+    with open(os.path.join(base_dir, f"{name_prefix}.ocr.json"), "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
 # 🌟 新增：保存切片图片+OCR文本到同名txt（移植自王主任二单 cutter）
 # 🌟 修改：解耦 OCR 输入图像与 LLM 输入图像
 def save_part_with_ocr(img_for_ocr, img_for_llm, base_dir, name_prefix, ocr_engine):
@@ -98,6 +135,11 @@ def save_part_with_ocr(img_for_ocr, img_for_llm, base_dir, name_prefix, ocr_engi
     # 2. 保存为同名 txt 字典文件
     with open(os.path.join(base_dir, f"{name_prefix}.txt"), "w", encoding="utf-8") as f:
         f.write(txt_str)
+
+    try:
+        write_ocr_evidence_json(base_dir, name_prefix, res)
+    except Exception as exc:
+        print(f"⚠️ [Worker] OCR evidence 保存失败 {name_prefix}: {exc}")
         
     # 3. 将带有表头的图像进行放大补边优化，并保存给 LLM 看
     cv2.imwrite(os.path.join(base_dir, f"{name_prefix}.png"), optimize_image_for_llm(img_for_llm))
