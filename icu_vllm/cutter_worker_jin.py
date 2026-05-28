@@ -6,9 +6,19 @@ import shutil
 import re
 import argparse
 import json
+from dataclasses import dataclass
 from paddleocr import PaddleOCR
 
 TIME_PATTERN = re.compile(r"([01]?\d|2[0-3])[:：][0-5]\d")
+
+
+@dataclass(frozen=True)
+class TargetColumnSpec:
+    key: str
+    field: str
+    file_slug: str
+    x1: int
+    x2: int
 
 def get_time_from_zone(img_segment, ocr_engine):
     try:
@@ -77,6 +87,66 @@ def choose_jin_column_splits(col_xs, image_width):
     x1 = max(0, min(x1, image_width - 2))
     x2 = max(x1 + 1, min(x2, image_width - 1))
     return x1, x2
+
+
+def _clamped_range(left, right, image_width, padding=12):
+    x1 = max(0, int(left) - int(padding))
+    x2 = min(int(image_width), int(right) + int(padding))
+    if x2 <= x1:
+        x2 = min(int(image_width), x1 + 1)
+    return x1, x2
+
+
+def choose_jin_target_column_ranges(col_xs, image_width, padding=12):
+    """Return experimental single-column crop ranges for high-risk Jin fields."""
+    if len(col_xs) >= 47:
+        iv_x1, iv_x2 = _clamped_range(col_xs[20], col_xs[26], image_width, padding)
+        tube_x1, tube_x2 = _clamped_range(col_xs[35], col_xs[36], image_width, padding)
+        obs_x1, obs_x2 = _clamped_range(col_xs[45], col_xs[46], image_width, padding)
+    else:
+        iv_x1, iv_x2 = _clamped_range(image_width * 0.30, image_width * 0.42, image_width, padding)
+        tube_x1, tube_x2 = _clamped_range(image_width * 0.645, image_width * 0.70, image_width, padding)
+        obs_x1, obs_x2 = _clamped_range(image_width * 0.88, image_width, image_width, padding)
+
+    return {
+        "iv_drug": TargetColumnSpec("iv_drug", "入量_静脉用药", "iv_drug", iv_x1, iv_x2),
+        "tube_care": TargetColumnSpec("tube_care", "管路护理", "tube_care", tube_x1, tube_x2),
+        "observation": TargetColumnSpec("observation", "病情观察及处理", "observation", obs_x1, obs_x2),
+    }
+
+
+def save_jin_target_column_crops(clean_block, base_dir, block_prefix, specs):
+    """Save high-risk single-column crops and one overlay debug image."""
+    h, w = clean_block.shape[:2]
+    overlay = clean_block.copy()
+    colors = {
+        "iv_drug": (255, 0, 0),
+        "tube_care": (0, 160, 255),
+        "observation": (0, 128, 0),
+    }
+    for spec in specs.values():
+        x1 = max(0, min(spec.x1, w - 1))
+        x2 = max(x1 + 1, min(spec.x2, w))
+        crop = clean_block[:, x1:x2]
+        cv2.imwrite(
+            os.path.join(base_dir, f"{block_prefix}_col_{spec.file_slug}.png"),
+            optimize_image_for_llm(crop),
+        )
+        cv2.rectangle(overlay, (x1, 0), (x2 - 1, h - 1), colors.get(spec.key, (0, 0, 255)), 4)
+        cv2.putText(
+            overlay,
+            spec.file_slug,
+            (x1 + 4, min(40, h - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            colors.get(spec.key, (0, 0, 255)),
+            2,
+            cv2.LINE_AA,
+        )
+    cv2.imwrite(
+        os.path.join(base_dir, f"{block_prefix}_col_overlay.png"),
+        optimize_image_for_llm(overlay),
+    )
 
 # 🌟 新增：从表头一次性提取所有竖线坐标和全局切分点（移植自王主任一单 cutter）
 def get_global_splits_by_counting(header_img):
@@ -373,7 +443,8 @@ def main():
             data_row = img[y_start:y_end, :]
 
             # 2. 拼接表头 (专供 LLM 视觉输入使用)
-            final_block = np.vstack((header, data_row))
+            clean_block = np.vstack((header, data_row))
+            final_block = clean_block.copy()
             header_h = header.shape[0]
             
             # 🌟 严谨处理：仅在提供给 LLM 的 final_block 上绘制红色垂直辅助线
@@ -397,6 +468,12 @@ def main():
             save_part_with_ocr(part_L_ocr, part_L_llm, output_base, f"block_{idx:02d}_L", ocr)
             save_part_with_ocr(part_M_ocr, part_M_llm, output_base, f"block_{idx:02d}_M", ocr)
             save_part_with_ocr(part_R_ocr, part_R_llm, output_base, f"block_{idx:02d}_R", ocr)
+            save_jin_target_column_crops(
+                clean_block,
+                output_base,
+                f"block_{idx:02d}",
+                choose_jin_target_column_ranges(all_sub_lines, W),
+            )
             
             # 画上诊断线，方便预览
             cv2.rectangle(vis_img, (2, y_start), (W-2, y_end), (255, 0, 0), 2) 

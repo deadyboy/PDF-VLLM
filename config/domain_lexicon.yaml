@@ -1,0 +1,57 @@
+units_and_measurements:
+  - ml/h
+  - L/min
+  - r/min
+  - "%"
+  - ug
+  - μg
+  - UG
+  - mg
+  - mmol/L
+  - 数字 + 单位
+  - 数字 + 给药速度单位
+
+icu_abbreviations:
+  - ECMO
+  - VV-ECMO
+  - CVVHDF
+  - CPOT
+  - APTT
+  - FiO2
+  - SpO2
+
+common_medical_phrases:
+  - 医嘱
+  - 遵医嘱
+  - 泵入
+  - 胃管泵入
+  - 调整至
+  - 继续观察
+  - 辅助通气
+  - 气管插管
+  - 呼吸机辅助通气
+  - 血流量
+  - 氧浓度
+  - 转速
+
+medications_and_fluids:
+  - 肝素钠
+  - 咪达唑仑
+  - 枸橼酸舒芬太尼
+  - 舒芬太尼
+  - 氯化钠注射液
+  - 肠内营养液
+
+manufacturers_or_product_terms:
+  - 苏恩华
+  - 丰原
+  - 人福
+
+treatment_context_terms:
+  - 右颈内静脉
+  - 右股静脉
+  - VV-ECMO
+  - CVVHDF
+  - 气管插管
+  - 呼吸机辅助通气
+  - 水箱

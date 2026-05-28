@@ -1,0 +1,61 @@
+punctuation_equivalence:
+  enabled: true
+  cpot_score_optional_space: true
+  normalize:
+    "，": ","
+    "：": ":"
+    "；": ";"
+    "（": "("
+    "）": ")"
+    "％": "%"
+    "　": ""
+    " ": ""
+
+unit_surface_equivalence:
+  enabled: true
+  units:
+    r/min:
+      - 转/分
+      - 转/分钟
+      - r/min
+      - rpm
+    L/min:
+      - L/分
+      - L/min
+      - L/分钟
+    ml:
+      - ml
+      - mL
+      - ML
+    mg:
+      - mg
+      - MG
+    ug:
+      - ug
+      - UG
+      - μg
+    ℃:
+      - ℃
+      - °C
+
+forbidden_inferred_unit_equivalence:
+  enabled: true
+  examples:
+    - "3660 -> 3660 r/min"
+    - "4.28 -> 4.28 L/min"
+    - "50M -> 50ml"
+    - "45M -> 45ml"
+    - "45胍 -> 45mg"
+    - "CPOT分 -> CPOT0分"
+    - "CPOT -> CPOT0"
+    - "删除数字、补数字、改变数字"
+
+score_spacing_equivalence:
+  enabled: true
+  cpot_zero_spacing: true
+  o_zero_sensitivity: false
+
+numeric_equivalence:
+  enabled: true
+  allow_leading_zero_equivalence: true
+  rounding_tolerance: false
